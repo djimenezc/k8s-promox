@@ -1,7 +1,7 @@
 # K3s on Proxmox - Implementation Plan
 
 ## Overview
-Provision a K3s Kubernetes cluster on a Proxmox VE server using Terraform.
+Provision a K3s Kubernetes cluster on a Proxmox VE server using OpenTofu.
 
 **Hardware Specs:**
 - Host: Geekom IT12
@@ -37,7 +37,7 @@ Provision a K3s Kubernetes cluster on a Proxmox VE server using Terraform.
 ### 1. Proxmox Configuration
 - [ ] Proxmox VE installed and accessible
 - [ ] SSH access to Proxmox host
-- [ ] API token created for Terraform
+- [ ] API token created for OpenTofu
   ```bash
   pveum user add terraform@pve
   pveum aclmod / -user terraform@pve -role Administrator
@@ -64,11 +64,11 @@ Provision a K3s Kubernetes cluster on a Proxmox VE server using Terraform.
   ```
 
 ### 3. Local Development Tools
-- [ ] Terraform installed (>= 1.5.0)
+- [ ] OpenTofu installed (>= 1.6.0)
 - [ ] SSH key pair generated for VM access
 - [ ] kubectl installed for cluster management
 
-## Terraform Structure
+## Infrastructure Code Structure
 
 ```
 k8s-promox/
@@ -104,21 +104,21 @@ k8s-promox/
 
 ## Implementation Phases
 
-### Phase 1: Terraform Provider Setup
-**Goal:** Configure Terraform to communicate with Proxmox
+### Phase 1: OpenTofu Provider Setup
+**Goal:** Configure OpenTofu to communicate with Proxmox
 
 **Tasks:**
 1. Create `providers.tf` with Proxmox provider
 2. Configure `variables.tf` with Proxmox endpoint, credentials
 3. Create `terraform.tfvars.example` template
-4. Test connection with `terraform init` and `terraform plan`
+4. Test connection with `tofu init` and `tofu plan`
 
 **Key Files:**
 - `terraform/providers.tf`
 - `terraform/variables.tf`
 - `terraform/terraform.tfvars.example`
 
-**Terraform Provider:**
+**OpenTofu Provider:**
 ```hcl
 terraform {
   required_providers {
@@ -207,7 +207,7 @@ kubectl delete pod test
 3. Add troubleshooting guide
 4. Create backup/restore procedures
 
-## Key Terraform Resources
+## Key OpenTofu Resources
 
 ### Proxmox Provider Configuration
 ```hcl
@@ -347,8 +347,8 @@ With 24 GB allocated to VMs and 8 GB reserved for Proxmox host:
 ### 2. K3s Token Retrieval
 **Challenge:** Worker nodes need control plane token
 **Mitigation:**
-- Use Terraform provisioners to retrieve token
-- Store token in Terraform output (sensitive)
+- Use OpenTofu provisioners to retrieve token
+- Store token in OpenTofu output (sensitive)
 - Pass token to worker cloud-init via template
 
 ### 3. Network Connectivity
@@ -361,7 +361,7 @@ With 24 GB allocated to VMs and 8 GB reserved for Proxmox host:
 ### 4. Cloud-Init Timing
 **Challenge:** K3s installation may take time
 **Mitigation:**
-- Use depends_on in Terraform for worker nodes
+- Use depends_on in OpenTofu for worker nodes
 - Add readiness checks before joining workers
 - Use retry logic in scripts
 
@@ -398,6 +398,7 @@ The implementation will be considered successful when:
 ## References
 
 - [K3s Documentation](https://docs.k3s.io/)
-- [Proxmox Terraform Provider](https://registry.terraform.io/providers/Telmate/proxmox/latest/docs)
+- [OpenTofu Documentation](https://opentofu.org/docs/)
+- [Proxmox Provider (OpenTofu/Terraform Compatible)](https://registry.terraform.io/providers/Telmate/proxmox/latest/docs)
 - [Cloud-Init Documentation](https://cloudinit.readthedocs.io/)
 - [Proxmox Cloud-Init Guide](https://pve.proxmox.com/wiki/Cloud-Init_Support)
