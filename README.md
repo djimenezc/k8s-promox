@@ -1,2 +1,2 @@
 # k8s-promox
-Provision k8s cluster in promox server
+Provision a Kubernetes cluster on a Proxmox server.
