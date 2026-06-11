@@ -5,6 +5,7 @@
 PROXMOX_HOST ?= 192.168.50.209
 PROXMOX_PORT ?= 8006
 PROXMOX_USER ?= root
+PROXMOX_STORAGE ?= local-zfs
 PROXMOX_API_URL = https://$(PROXMOX_HOST):$(PROXMOX_PORT)/api2/json
 
 # API Token Configuration (override with environment variables or create .env file)
@@ -183,10 +184,15 @@ create-cloud-init-template: ## Create Ubuntu 22.04 cloud-init template
 	@ssh $(PROXMOX_USER)@$(PROXMOX_HOST) "\
 		cd /tmp && \
 		wget -q https://cloud-images.ubuntu.com/jammy/current/jammy-server-cloudimg-amd64.img && \
+		apt-get update && \
+		apt-get install -y libguestfs-tools && \
+		virt-customize -a jammy-server-cloudimg-amd64.img \
+			--install qemu-guest-agent \
+			--run-command 'systemctl enable qemu-guest-agent' && \
 		qm create 9000 --name ubuntu-cloud --memory 2048 --net0 virtio,bridge=vmbr0 && \
-		qm importdisk 9000 jammy-server-cloudimg-amd64.img local-lvm && \
-		qm set 9000 --scsihw virtio-scsi-pci --scsi0 local-lvm:vm-9000-disk-0 && \
-		qm set 9000 --ide2 local-lvm:cloudinit && \
+		qm importdisk 9000 jammy-server-cloudimg-amd64.img $(PROXMOX_STORAGE) && \
+		qm set 9000 --scsihw virtio-scsi-pci --scsi0 $(PROXMOX_STORAGE):vm-9000-disk-0 && \
+		qm set 9000 --ide2 $(PROXMOX_STORAGE):cloudinit && \
 		qm set 9000 --boot c --bootdisk scsi0 && \
 		qm set 9000 --serial0 socket --vga serial0 && \
 		qm set 9000 --agent enabled=1 && \

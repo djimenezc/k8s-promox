@@ -9,7 +9,7 @@ resource "proxmox_virtual_environment_vm" "k3s_control" {
     full  = true
   }
 
-  # QEMU Guest Agent
+  # QEMU Guest Agent (installed in the template via virt-customize)
   agent {
     enabled = true
   }
@@ -81,7 +81,7 @@ resource "proxmox_virtual_environment_vm" "k3s_workers" {
     full  = true
   }
 
-  # QEMU Guest Agent
+  # QEMU Guest Agent (installed in the template via virt-customize)
   agent {
     enabled = true
   }
