@@ -1,0 +1,34 @@
+# Proxmox Configuration
+proxmox_api_url      = "https://192.168.50.209:8006/"
+proxmox_token_id     = "root@pam!terraform"
+proxmox_token_secret = "your-token-secret-here"
+proxmox_node         = "pve"
+
+# Template Configuration
+template_name = "ubuntu-cloud"
+template_id   = 9000
+
+# Network Configuration
+network_gateway = "192.168.1.1"
+network_cidr    = 24
+
+# SSH Public Key (paste your public key here)
+ssh_public_key = "ssh-rsa AAAAB3NzaC1yc2EAAAA... your-key-here"
+
+# Storage
+storage_pool = "local-zfs"
+
+# Control Plane
+control_plane_name   = "k3s-control"
+control_plane_ip     = "192.168.1.10"
+control_plane_cpu    = 2
+control_plane_memory = 4096
+control_plane_disk_size = 30
+
+# Workers
+worker_count       = 2
+worker_name_prefix = "k3s-worker"
+worker_ip_prefix   = "192.168.1.1"  # Will append 1, 2, etc.
+worker_cpu         = 5
+worker_memory      = 10240
+worker_disk_size   = 30

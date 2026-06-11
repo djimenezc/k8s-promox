@@ -210,6 +210,11 @@ tofu-apply: ## Apply OpenTofu configuration
 	@printf "$(YELLOW)Applying OpenTofu configuration...$(NC)\n"
 	@cd terraform && tofu apply
 
+.PHONY: tofu-apply-auto
+tofu-apply-auto: ## Apply OpenTofu configuration without confirmation
+	@printf "$(YELLOW)Applying OpenTofu configuration (auto-approve)...$(NC)\n"
+	@cd terraform && tofu apply -auto-approve
+
 .PHONY: tofu-destroy
 tofu-destroy: ## Destroy OpenTofu-managed infrastructure
 	@printf "$(RED)WARNING: This will destroy all OpenTofu-managed VMs$(NC)\n"
