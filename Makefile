@@ -5,12 +5,19 @@
 PROXMOX_HOST ?= 192.168.50.209
 PROXMOX_PORT ?= 8006
 PROXMOX_USER ?= root
+PROXMOX_STORAGE ?= local-zfs
 PROXMOX_API_URL = https://$(PROXMOX_HOST):$(PROXMOX_PORT)/api2/json
 
 # API Token Configuration (override with environment variables or create .env file)
 # Format: user@realm!tokenid
 PROXMOX_TOKEN_ID ?= root@pam!terraform
 PROXMOX_TOKEN_SECRET ?=
+
+# K3s Cluster Configuration
+VM_USER ?= ubuntu
+CONTROL_PLANE_IP ?= 192.168.50.10
+# Write kubeconfig into the parent meta-repo so direnv (.envrc) can export it
+KUBECONFIG_OUT ?= ../kubeconfig
 
 # Power Management Configuration
 # Set the MAC address of your Proxmox server for Wake-on-LAN
@@ -183,10 +190,15 @@ create-cloud-init-template: ## Create Ubuntu 22.04 cloud-init template
 	@ssh $(PROXMOX_USER)@$(PROXMOX_HOST) "\
 		cd /tmp && \
 		wget -q https://cloud-images.ubuntu.com/jammy/current/jammy-server-cloudimg-amd64.img && \
+		apt-get update && \
+		apt-get install -y libguestfs-tools && \
+		virt-customize -a jammy-server-cloudimg-amd64.img \
+			--install qemu-guest-agent \
+			--run-command 'systemctl enable qemu-guest-agent' && \
 		qm create 9000 --name ubuntu-cloud --memory 2048 --net0 virtio,bridge=vmbr0 && \
-		qm importdisk 9000 jammy-server-cloudimg-amd64.img local-lvm && \
-		qm set 9000 --scsihw virtio-scsi-pci --scsi0 local-lvm:vm-9000-disk-0 && \
-		qm set 9000 --ide2 local-lvm:cloudinit && \
+		qm importdisk 9000 jammy-server-cloudimg-amd64.img $(PROXMOX_STORAGE) && \
+		qm set 9000 --scsihw virtio-scsi-pci --scsi0 $(PROXMOX_STORAGE):vm-9000-disk-0 && \
+		qm set 9000 --ide2 $(PROXMOX_STORAGE):cloudinit && \
 		qm set 9000 --boot c --bootdisk scsi0 && \
 		qm set 9000 --serial0 socket --vga serial0 && \
 		qm set 9000 --agent enabled=1 && \
@@ -209,6 +221,20 @@ tofu-plan: ## Run OpenTofu plan
 tofu-apply: ## Apply OpenTofu configuration
 	@printf "$(YELLOW)Applying OpenTofu configuration...$(NC)\n"
 	@cd terraform && tofu apply
+
+.PHONY: tofu-apply-auto
+tofu-apply-auto: ## Apply OpenTofu configuration without confirmation
+	@printf "$(YELLOW)Applying OpenTofu configuration (auto-approve)...$(NC)\n"
+	@cd terraform && tofu apply -auto-approve
+
+.PHONY: get-kubeconfig
+get-kubeconfig: ## Fetch kubeconfig from the control plane into the meta-repo root
+	@printf "$(YELLOW)Fetching kubeconfig from $(CONTROL_PLANE_IP)...$(NC)\n"
+	@ssh $(VM_USER)@$(CONTROL_PLANE_IP) "sudo cat /etc/rancher/k3s/k3s.yaml" \
+		| sed "s#https://127.0.0.1:6443#https://$(CONTROL_PLANE_IP):6443#" > $(KUBECONFIG_OUT)
+	@chmod 600 $(KUBECONFIG_OUT)
+	@printf "$(GREEN)✓ Wrote $(KUBECONFIG_OUT)$(NC)\n"
+	@printf "$(YELLOW)direnv exports KUBECONFIG from .envrc — run 'direnv reload' to pick it up$(NC)\n"
 
 .PHONY: tofu-destroy
 tofu-destroy: ## Destroy OpenTofu-managed infrastructure
