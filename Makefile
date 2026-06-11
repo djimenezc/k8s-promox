@@ -13,6 +13,12 @@ PROXMOX_API_URL = https://$(PROXMOX_HOST):$(PROXMOX_PORT)/api2/json
 PROXMOX_TOKEN_ID ?= root@pam!terraform
 PROXMOX_TOKEN_SECRET ?=
 
+# K3s Cluster Configuration
+VM_USER ?= ubuntu
+CONTROL_PLANE_IP ?= 192.168.50.10
+# Write kubeconfig into the parent meta-repo so direnv (.envrc) can export it
+KUBECONFIG_OUT ?= ../kubeconfig
+
 # Power Management Configuration
 # Set the MAC address of your Proxmox server for Wake-on-LAN
 PROXMOX_MAC_ADDRESS ?=
@@ -220,6 +226,15 @@ tofu-apply: ## Apply OpenTofu configuration
 tofu-apply-auto: ## Apply OpenTofu configuration without confirmation
 	@printf "$(YELLOW)Applying OpenTofu configuration (auto-approve)...$(NC)\n"
 	@cd terraform && tofu apply -auto-approve
+
+.PHONY: get-kubeconfig
+get-kubeconfig: ## Fetch kubeconfig from the control plane into the meta-repo root
+	@printf "$(YELLOW)Fetching kubeconfig from $(CONTROL_PLANE_IP)...$(NC)\n"
+	@ssh $(VM_USER)@$(CONTROL_PLANE_IP) "sudo cat /etc/rancher/k3s/k3s.yaml" \
+		| sed "s#https://127.0.0.1:6443#https://$(CONTROL_PLANE_IP):6443#" > $(KUBECONFIG_OUT)
+	@chmod 600 $(KUBECONFIG_OUT)
+	@printf "$(GREEN)✓ Wrote $(KUBECONFIG_OUT)$(NC)\n"
+	@printf "$(YELLOW)direnv exports KUBECONFIG from .envrc — run 'direnv reload' to pick it up$(NC)\n"
 
 .PHONY: tofu-destroy
 tofu-destroy: ## Destroy OpenTofu-managed infrastructure
