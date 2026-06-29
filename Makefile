@@ -1,6 +1,11 @@
 # Proxmox K3s Cluster - Makefile
 # Verify connections and manage infrastructure
 
+# Generic OpenTofu workflow targets (tofu-init/plan/apply/apply-auto/destroy/clean)
+# live in the meta-repo root and are shared with the cloudflare sub-repo.
+# TF_DIR defaults to ./terraform, so `make tofu-plan` here acts on this repo.
+include ../Makefile.tofu
+
 # Proxmox Configuration
 PROXMOX_HOST ?= 192.168.50.209
 PROXMOX_PORT ?= 8006
@@ -207,26 +212,6 @@ create-cloud-init-template: ## Create Ubuntu 22.04 cloud-init template
 		printf '$(GREEN)✓ Cloud-init template created successfully$(NC)\n' \
 	"
 
-.PHONY: tofu-init
-tofu-init: ## Initialize OpenTofu
-	@printf "$(YELLOW)Initializing OpenTofu...$(NC)\n"
-	@cd terraform && tofu init
-
-.PHONY: tofu-plan
-tofu-plan: ## Run OpenTofu plan
-	@printf "$(YELLOW)Running OpenTofu plan...$(NC)\n"
-	@cd terraform && tofu plan
-
-.PHONY: tofu-apply
-tofu-apply: ## Apply OpenTofu configuration
-	@printf "$(YELLOW)Applying OpenTofu configuration...$(NC)\n"
-	@cd terraform && tofu apply
-
-.PHONY: tofu-apply-auto
-tofu-apply-auto: ## Apply OpenTofu configuration without confirmation
-	@printf "$(YELLOW)Applying OpenTofu configuration (auto-approve)...$(NC)\n"
-	@cd terraform && tofu apply -auto-approve
-
 .PHONY: get-kubeconfig
 get-kubeconfig: ## Fetch kubeconfig from the control plane into the meta-repo root
 	@printf "$(YELLOW)Fetching kubeconfig from $(CONTROL_PLANE_IP)...$(NC)\n"
@@ -235,19 +220,5 @@ get-kubeconfig: ## Fetch kubeconfig from the control plane into the meta-repo ro
 	@chmod 600 $(KUBECONFIG_OUT)
 	@printf "$(GREEN)✓ Wrote $(KUBECONFIG_OUT)$(NC)\n"
 	@printf "$(YELLOW)direnv exports KUBECONFIG from .envrc — run 'direnv reload' to pick it up$(NC)\n"
-
-.PHONY: tofu-destroy
-tofu-destroy: ## Destroy OpenTofu-managed infrastructure
-	@printf "$(RED)WARNING: This will destroy all OpenTofu-managed VMs$(NC)\n"
-	@read -p "Are you sure? (yes/no): " confirm && [ "$$confirm" = "yes" ] && \
-		cd terraform && tofu destroy || printf "Cancelled\n"
-
-.PHONY: clean
-clean: ## Clean temporary files
-	@printf "$(YELLOW)Cleaning temporary files...$(NC)\n"
-	@rm -rf terraform/.terraform
-	@rm -f terraform/.terraform.lock.hcl
-	@rm -f terraform/terraform.tfstate.backup
-	@printf "$(GREEN)✓ Cleaned$(NC)\n"
 
 .DEFAULT_GOAL := help
