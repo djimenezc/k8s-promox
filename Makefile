@@ -40,7 +40,7 @@ NC := \033[0m # No Color
 help: ## Show this help message
 	@echo "Proxmox K3s Cluster - Available targets:"
 	@echo ""
-	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | awk 'BEGIN {FS = ":.*?## "}; {printf "  $(GREEN)%-20s$(NC) %s\n", $$1, $$2}'
+	@grep -hE '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | awk 'BEGIN {FS = ":.*?## "}; {printf "  $(GREEN)%-20s$(NC) %s\n", $$1, $$2}'
 	@echo ""
 	@echo "Configuration:"
 	@echo "  PROXMOX_HOST: $(PROXMOX_HOST)"
