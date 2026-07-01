@@ -44,3 +44,7 @@ worker_count_pve2  = 2
 worker_ips_pve2    = ["192.168.1.212", "192.168.1.213"]
 worker_cpu_pve2    = 7
 worker_memory_pve2 = 13312
+
+# K3s version pinned on every node (see terraform/k3s.tf) — bump and
+# `make tofu-apply` to upgrade the whole cluster
+k3s_version = "v1.36.2+k3s1"

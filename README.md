@@ -110,6 +110,15 @@ Run `make help` to see the full list, including per-node targets.
 - `make tofu-apply` - Apply infrastructure changes
 - `make tofu-destroy` - Destroy all managed infrastructure
 
+### K3s Version Management
+
+The k3s version running on every node is pinned via `k3s_version` in
+`terraform/terraform.tfvars` (see `terraform/k3s.tf`). To upgrade the whole
+cluster: bump `k3s_version`, then `make tofu-plan` / `make tofu-apply` —
+this re-runs the k3s installer against the control plane first, then every
+worker, with `INSTALL_K3S_VERSION` pinned to the new value. Re-applying with
+an unchanged version is a no-op.
+
 ## Configuration
 
 ### Environment Variables

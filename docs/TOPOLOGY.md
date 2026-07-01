@@ -70,59 +70,53 @@ these are deliberately separate variables from `worker_cpu` / `worker_memory`
 different capacity. Applying a cpu/memory resize on these particular VMs
 took effect live via Proxmox hot-add, without a reboot.
 
-**They are now part of the K3s cluster** (joined via `scripts/install-k3s-worker.sh`,
-see `IMPLEMENTATION_PLAN.md` Phase 4) — `kubectl get nodes` on the control
-plane lists all five nodes `Ready`.
+**They are now part of the K3s cluster**, joined by running the k3s agent
+installer directly against each (`curl -sfL https://get.k3s.io | sudo sh -s -
+agent --server https://192.168.50.10:6443 --token $TOKEN --node-ip <ip>`,
+token fetched fresh from the control plane's
+`/var/lib/rancher/k3s/server/node-token` each time — see
+`scripts/install-k3s-worker.sh` / `IMPLEMENTATION_PLAN.md` Phase 4 for the
+general pattern). `kubectl get nodes` on the control plane lists all five
+nodes `Ready`.
 
-Avoid passing `--token-file /tmp/...` (or any path under `/tmp`) to the k3s
-installer for future joins: the k3s-agent systemd unit can reference that
-path for its full lifetime, and `/tmp` doesn't survive a reboot (and
-shouldn't be relied on to persist a secret anyway). If a worker's `k3s-agent`
-ever gets stuck on boot logging `Waiting for file "..." to be created`,
-that's this — check `systemctl cat k3s-agent`'s `ExecStart`/`EnvironmentFile`
-for a stale file reference. Safer pattern used here: stage the token as a
-transient file *outside* `/tmp` semantics by piping it directly between two
-SSH sessions (so the plaintext token never appears in shell history or a
-command transcript), e.g.:
-
-```bash
-ssh ubuntu@192.168.50.10 "sudo cat /var/lib/rancher/k3s/server/node-token" \
-  | ssh ubuntu@192.168.50.212 "sudo tee /tmp/k3s-token >/dev/null && sudo chmod 600 /tmp/k3s-token"
-ssh ubuntu@192.168.50.212 "curl -sfL https://get.k3s.io | sudo sh -s - agent \
-  --server https://192.168.50.10:6443 --token-file /tmp/k3s-token --node-ip 192.168.50.212 \
-  && sudo rm -f /tmp/k3s-token"
-```
-
-k3s resolves `--token-file` into a literal `--token` in the persisted
-systemd unit at install time, so deleting the staged file immediately after
-install is normally safe — but treat any `--token-file` reference to `/tmp`
-that's still live *after* install as a bug worth fixing (e.g. via
-`systemctl edit k3s-agent` or reinstalling with a literal `--token`).
+`get.k3s.io` installs the latest **stable channel** release when
+`INSTALL_K3S_VERSION` isn't set, which is how the `pve2` workers ended up on
+`v1.36.2+k3s1` while the original three nodes were still on `v1.35.5+k3s1`
+(installed when 1.35.5 was current stable). That version skew has since been
+resolved — see below.
 
 ## Logical layer: K3s cluster
 
 All five VMs sit on the same `192.168.50.0/24` LAN via the `vmbr0` bridge on
-their respective Proxmox host, and all five are joined to K3s:
+their respective Proxmox host, and all five are joined to K3s on the same
+version:
 
-| VM                  | IP              | vCPU | RAM   | Proxmox host | K3s version    | K3s status | Role |
-|---------------------|-----------------|------|-------|--------------|-----------------|------------|------|
-| `k3s-control`       | 192.168.50.10   | 2    | 6 GB  | `pve`        | v1.35.5+k3s1    | Ready      | Control plane (traefik/servicelb disabled) |
-| `k3s-worker-1`      | 192.168.50.11   | 5    | 10 GB | `pve`        | v1.35.5+k3s1    | Ready      | Worker |
-| `k3s-worker-2`      | 192.168.50.12   | 5    | 10 GB | `pve`        | v1.35.5+k3s1    | Ready      | Worker |
-| `k3s-worker-pve2-1` | 192.168.50.212  | 7    | 13 GB | `pve2`       | v1.36.2+k3s1    | Ready      | Worker |
-| `k3s-worker-pve2-2` | 192.168.50.213  | 7    | 13 GB | `pve2`       | v1.36.2+k3s1    | Ready      | Worker |
+| VM                  | IP              | vCPU | RAM   | Proxmox host | K3s version  | K3s status | Role |
+|---------------------|-----------------|------|-------|--------------|--------------|------------|------|
+| `k3s-control`       | 192.168.50.10   | 2    | 6 GB  | `pve`        | v1.36.2+k3s1 | Ready      | Control plane (traefik/servicelb disabled) |
+| `k3s-worker-1`      | 192.168.50.11   | 5    | 10 GB | `pve`        | v1.36.2+k3s1 | Ready      | Worker |
+| `k3s-worker-2`      | 192.168.50.12   | 5    | 10 GB | `pve`        | v1.36.2+k3s1 | Ready      | Worker |
+| `k3s-worker-pve2-1` | 192.168.50.212  | 7    | 13 GB | `pve2`       | v1.36.2+k3s1 | Ready      | Worker |
+| `k3s-worker-pve2-2` | 192.168.50.213  | 7    | 13 GB | `pve2`       | v1.36.2+k3s1 | Ready      | Worker |
 
 The K3s layer has no dependency on which Proxmox node a VM runs on — it only
 cares about VM IPs. `pve2` joining the Proxmox cluster and hosting new VMs
 does not, by itself, extend the K3s cluster; each new worker still needs the
 `k3s-agent` join step run against it (see above).
 
+### K3s version management: `terraform/k3s.tf`
+
+The version skew above is now managed as code instead of ad-hoc SSH. `var.k3s_version`
+(`terraform/variables.tf`, currently `v1.36.2+k3s1`) drives a `null_resource`
+per node (`terraform/k3s.tf`) that re-runs the k3s installer with
+`INSTALL_K3S_VERSION` pinned to that value via `local-exec` (there's no
+Terraform provider for k3s itself, so this is the standard bootstrap
+pattern). Bumping `k3s_version` and running `make tofu-apply` upgrades every
+node — control plane first, then all workers. Re-applying with an unchanged
+version is a no-op (`get.k3s.io` skips the reinstall if the binary already
+matches).
+
 **Known follow-ups, not urgent:**
-- Version skew: the `pve2` workers installed the latest stable k3s
-  (`v1.36.2+k3s1`) at join time, while the original three nodes are on
-  `v1.35.5+k3s1`. Fine short-term (k3s tolerates a minor version gap between
-  agent and server), but worth reconciling — either upgrade the older nodes
-  or pin `INSTALL_K3S_VERSION` on future joins to match.
 - The Proxmox cluster has only 2 nodes and no QDevice/tie-breaker — no HA
   quorum majority if one node drops.
 - Still a single K3s control-plane node — no etcd HA (would need 3 for real

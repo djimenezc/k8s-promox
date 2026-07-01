@@ -176,3 +176,10 @@ variable "worker_memory_pve2" {
   type        = number
   default     = 13312
 }
+
+# K3s Version Management (see k3s.tf)
+variable "k3s_version" {
+  description = "K3s version pinned on every node via INSTALL_K3S_VERSION (e.g. v1.36.2+k3s1). https://github.com/k3s-io/k3s/releases"
+  type        = string
+  default     = "v1.36.2+k3s1"
+}
