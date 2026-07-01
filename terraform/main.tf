@@ -143,3 +143,78 @@ resource "proxmox_virtual_environment_vm" "k3s_workers" {
     ]
   }
 }
+
+# K3s Worker Nodes on pve2
+resource "proxmox_virtual_environment_vm" "k3s_workers_pve2" {
+  count     = var.worker_count_pve2
+  name      = "${var.worker_name_prefix}-pve2-${count.index + 1}"
+  node_name = var.proxmox_node_pve2
+
+  # Clone from the cloud-init template (pve2 has its own template, separate VM ID)
+  clone {
+    vm_id = var.template_id_pve2
+    full  = true
+  }
+
+  # QEMU Guest Agent (installed in the template via virt-customize)
+  agent {
+    enabled = true
+  }
+
+  # CPU / Memory (pve2 has its own sizing — see worker_cpu_pve2/worker_memory_pve2)
+  cpu {
+    cores   = var.worker_cpu_pve2
+    sockets = 1
+  }
+
+  memory {
+    dedicated = var.worker_memory_pve2
+  }
+
+  # Boot disk
+  scsi_hardware = "virtio-scsi-pci"
+
+  disk {
+    datastore_id = var.storage_pool_pve2
+    interface    = "scsi0"
+    size         = var.worker_disk_size
+  }
+
+  boot_order = ["scsi0"]
+
+  # Network
+  network_device {
+    bridge = "vmbr0"
+    model  = "virtio"
+  }
+
+  operating_system {
+    type = "l26"
+  }
+
+  # Cloud-Init
+  initialization {
+    datastore_id = var.storage_pool_pve2
+
+    ip_config {
+      ipv4 {
+        address = "${var.worker_ips_pve2[count.index]}/${var.network_cidr}"
+        gateway = var.network_gateway
+      }
+    }
+
+    user_account {
+      username = "ubuntu"
+      keys     = [var.ssh_public_key]
+    }
+  }
+
+  # Ensure control plane is created first
+  depends_on = [proxmox_virtual_environment_vm.k3s_control]
+
+  lifecycle {
+    ignore_changes = [
+      network_device,
+    ]
+  }
+}

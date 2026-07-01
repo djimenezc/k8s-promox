@@ -32,3 +32,19 @@ worker_ip_prefix   = "192.168.1.1"  # Will append 1, 2, etc.
 worker_cpu         = 5
 worker_memory      = 10240
 worker_disk_size   = 30
+
+# pve2 Node (second cluster member, capacity expansion)
+proxmox_node_pve2 = "pve2"
+template_id_pve2  = 9001
+storage_pool_pve2 = "local"
+
+# pve2 Workers — sized for pve2's own capacity, reserving ~2 vCPU / ~4 GB for
+# the Proxmox host itself (adjust to match your pve2 host's actual specs)
+worker_count_pve2  = 2
+worker_ips_pve2    = ["192.168.1.212", "192.168.1.213"]
+worker_cpu_pve2    = 7
+worker_memory_pve2 = 13312
+
+# K3s version pinned on every node (see terraform/k3s.tf) — bump and
+# `make tofu-apply` to upgrade the whole cluster
+k3s_version = "v1.36.2+k3s1"

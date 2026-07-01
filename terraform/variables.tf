@@ -84,7 +84,7 @@ variable "control_plane_cpu" {
 variable "control_plane_memory" {
   description = "Memory in MB for control plane"
   type        = number
-  default     = 4096
+  default     = 6144
 }
 
 variable "control_plane_disk_size" {
@@ -128,4 +128,58 @@ variable "worker_disk_size" {
   description = "Disk size in GB for workers"
   type        = number
   default     = 30
+}
+
+# pve2 Node Configuration (second cluster member, capacity expansion)
+variable "proxmox_node_pve2" {
+  description = "Proxmox node name for the second cluster member"
+  type        = string
+  default     = "pve2"
+}
+
+variable "template_id_pve2" {
+  description = "VM ID of the cloud-init template on pve2 (separate from pve's template; VMIDs are unique cluster-wide)"
+  type        = number
+  default     = 9001
+}
+
+variable "storage_pool_pve2" {
+  description = "Proxmox storage pool for VM disks and cloud-init on pve2 (dir-based, no ZFS pool on this node)"
+  type        = string
+  default     = "local"
+}
+
+variable "worker_count_pve2" {
+  description = "Number of worker nodes to run on pve2"
+  type        = number
+  default     = 2
+}
+
+variable "worker_ips_pve2" {
+  description = "Static IP addresses for pve2 workers, one per worker (indexed by count)"
+  type        = list(string)
+  default     = ["192.168.50.212", "192.168.50.213"]
+}
+
+# pve2 has its own cpu/memory sizing (distinct from worker_cpu/worker_memory,
+# which size pve's workers) since it's a different host with different
+# capacity: 16 threads / ~30.77 GB RAM. Reserve 2 vCPU / ~4 GB for the
+# Proxmox host itself and split the rest evenly across worker_count_pve2.
+variable "worker_cpu_pve2" {
+  description = "Number of CPU cores per worker on pve2"
+  type        = number
+  default     = 7
+}
+
+variable "worker_memory_pve2" {
+  description = "Memory in MB per worker on pve2"
+  type        = number
+  default     = 13312
+}
+
+# K3s Version Management (see k3s.tf)
+variable "k3s_version" {
+  description = "K3s version pinned on every node via INSTALL_K3S_VERSION (e.g. v1.36.2+k3s1). https://github.com/k3s-io/k3s/releases"
+  type        = string
+  default     = "v1.36.2+k3s1"
 }
