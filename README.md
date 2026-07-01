@@ -87,6 +87,23 @@ make help
 - `make check-cloud-init-template` - Check if template exists
 - `make create-cloud-init-template` - Create Ubuntu 22.04 cloud-init template
 
+### Multi-Node Management
+
+The cluster's Proxmox hosts are tracked in a node registry (`PROXMOX_NODES` in
+the Makefile — see [docs/TOPOLOGY.md](./docs/TOPOLOGY.md)). Every command
+above has a node-scoped equivalent by appending `-<node>`, and unsuffixed
+commands operate on the default node (`pve`):
+
+```bash
+make power-status-pve2      # any target ending in -% works per node
+make ssh-pve2
+make proxmox-info-pve2
+make power-status-all       # loop over every registered node
+make check-ssh-all
+```
+
+Run `make help` to see the full list, including per-node targets.
+
 ### OpenTofu Operations
 - `make tofu-init` - Initialize OpenTofu
 - `make tofu-plan` - Preview infrastructure changes
@@ -121,14 +138,19 @@ ssh-copy-id root@192.168.50.209
 
 ## Cluster Architecture
 
-See [IMPLEMENTATION_PLAN.md](./IMPLEMENTATION_PLAN.md) for detailed architecture and implementation phases.
+See [docs/TOPOLOGY.md](./docs/TOPOLOGY.md) for the full Proxmox node inventory
+and K3s VM layout, and [IMPLEMENTATION_PLAN.md](./IMPLEMENTATION_PLAN.md) for
+detailed architecture and implementation phases.
 
 **VM Layout:**
-- **k3s-control**: 2 vCPU, 4 GB RAM - Control Plane
-- **k3s-worker-1**: 5 vCPU, 10 GB RAM - Worker Node
-- **k3s-worker-2**: 5 vCPU, 10 GB RAM - Worker Node
+- **k3s-control**: 2 vCPU, 6 GB RAM - Control Plane (on `pve`)
+- **k3s-worker-1**: 5 vCPU, 10 GB RAM - Worker Node (on `pve`)
+- **k3s-worker-2**: 5 vCPU, 10 GB RAM - Worker Node (on `pve`)
+- **k3s-worker-pve2-1**: 7 vCPU, 13 GB RAM - Worker Node (on `pve2`)
+- **k3s-worker-pve2-2**: 7 vCPU, 13 GB RAM - Worker Node (on `pve2`)
 
-**Total:** 12 vCPU, 24 GB RAM (8 GB reserved for Proxmox host)
+**Total:** 26 vCPU, 52 GB RAM across both Proxmox hosts — see
+[docs/TOPOLOGY.md](./docs/TOPOLOGY.md) for the per-host breakdown.
 
 ## Troubleshooting
 
@@ -163,6 +185,7 @@ make create-cloud-init-template
 
 ## Documentation
 
+- [Topology](./docs/TOPOLOGY.md) - Proxmox node inventory and K3s VM layout
 - [Implementation Plan](./IMPLEMENTATION_PLAN.md) - Detailed implementation guide
 - [K3s Documentation](https://docs.k3s.io/)
 - [Proxmox OpenTofu/Terraform Provider](https://registry.terraform.io/providers/Telmate/proxmox/latest/docs)
