@@ -179,7 +179,10 @@ variable "worker_memory_pve2" {
 
 # K3s Version Management (see k3s.tf)
 variable "k3s_version" {
-  description = "K3s version pinned on every node via INSTALL_K3S_VERSION (e.g. v1.36.2+k3s1). https://github.com/k3s-io/k3s/releases"
+  # get.k3s.io will not downgrade an existing install, so this must never be set
+  # below the version already on the nodes — the apply would silently no-op and
+  # leave state claiming a version the cluster is not running.
+  description = "K3s version pinned on every node via INSTALL_K3S_VERSION (e.g. v1.36.4+k3s1). https://github.com/k3s-io/k3s/releases"
   type        = string
-  default     = "v1.36.2+k3s1"
+  default     = "v1.36.4+k3s1"
 }
