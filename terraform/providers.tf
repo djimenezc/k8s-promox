@@ -1,5 +1,9 @@
 terraform {
-  required_version = ">= 1.6.0"
+  required_version = ">= 1.10.0"
+
+  # Partial config — bucket/key/endpoint/locking are supplied by `make tofu-init`
+  # (see the meta-repo's Makefile.tofu). Cloudflare R2 speaks the S3 API.
+  backend "s3" {}
 
   required_providers {
     proxmox = {
