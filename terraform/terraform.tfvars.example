@@ -47,4 +47,4 @@ worker_memory_pve2 = 13312
 
 # K3s version pinned on every node (see terraform/k3s.tf) — bump and
 # `make tofu-apply` to upgrade the whole cluster
-k3s_version = "v1.36.2+k3s1"
+k3s_version = "v1.36.4+k3s1"
