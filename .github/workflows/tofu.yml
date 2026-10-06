@@ -1,0 +1,162 @@
+name: tofu
+
+# T-70 — OpenTofu plan on PRs, apply on merge to main, on the in-cluster ARC runners
+# (`arc-<repo>`, see gitops apps/base/arc). Same file in every repo with tofu stacks:
+# ai-developer-platform, cloudflare, k8s-promox.
+#
+# Stacks = folders holding a providers.tf. A changed file belongs to the deepest stack
+# that contains it; a change to this workflow plans/applies every stack.
+#
+# Inputs, all optional per repo:
+#   secrets/variables named TF_VAR_*  -> exported as-is (tofu reads them as input vars)
+#   R2_ACCOUNT_ID, AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY  -> R2 state backend (required)
+#   SSH_PRIVATE_KEY                   -> ~/.ssh/id_ed25519 (stacks that local-exec over ssh)
+#   TFVARS_<STACK>                    -> <stack>/ci.auto.tfvars (a git-ignored terraform.tfvars)
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+  pull-requests: write
+
+jobs:
+  stacks:
+    # GitHub-hosted on purpose: fork PRs never reach the self-hosted runners.
+    runs-on: ubuntu-latest
+    if: github.event_name == 'push' || github.event.pull_request.head.repo.full_name == github.repository
+    outputs:
+      list: ${{ steps.pick.outputs.list }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - id: pick
+        env:
+          BASE: ${{ github.event_name == 'push' && github.event.before || github.event.pull_request.base.sha }}
+        run: |
+          set -euo pipefail
+          stacks=$(git ls-files '*providers.tf' | xargs -n1 dirname | sort)
+          if [[ $BASE =~ ^0+$ ]] || ! git cat-file -e "$BASE^{commit}" 2>/dev/null; then
+            changed=$(git ls-files)
+          else
+            changed=$(git diff --name-only "$BASE" HEAD)
+          fi
+          if grep -qx '.github/workflows/tofu.yml' <<<"$changed"; then
+            picked=$stacks
+          else
+            picked=$(while read -r f; do
+              best=""
+              for s in $stacks; do [[ $f == "$s"/* && ${#s} -gt ${#best} ]] && best=$s; done
+              [[ -n $best ]] && echo "$best"
+            done <<<"$changed" | sort -u)
+          fi
+          echo "Stacks: ${picked:-none}"
+          echo "list=$(jq -cRn '[inputs | select(length > 0)]' <<<"$picked")" >> "$GITHUB_OUTPUT"
+
+  tofu:
+    needs: stacks
+    if: needs.stacks.outputs.list != '[]'
+    runs-on: arc-${{ github.event.repository.name }}
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        stack: ${{ fromJSON(needs.stacks.outputs.list) }}
+    concurrency:
+      group: tofu-${{ matrix.stack }}
+      cancel-in-progress: false
+    env:
+      AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+      AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+      R2_ACCOUNT_ID: ${{ secrets.R2_ACCOUNT_ID }}
+      TF_IN_AUTOMATION: "1"
+      STACK: ${{ matrix.stack }}
+    defaults:
+      run:
+        working-directory: ${{ matrix.stack }}
+    steps:
+      # Only this stack's folder: the meta-repo is ~250 MB (docs PDFs, graph) and a full
+      # checkout took >2 min over the home connection.
+      - uses: actions/checkout@v4
+        with:
+          sparse-checkout: ${{ matrix.stack }}
+
+      - name: Tools
+        working-directory: .
+        run: |
+          missing=""
+          for t in jq ssh unzip; do command -v $t >/dev/null || missing+=" $t"; done
+          missing=${missing/ ssh/ openssh-client}
+          [[ -z $missing ]] || { sudo apt-get update -qq && sudo apt-get install -y -qq $missing; }
+
+      - uses: opentofu/setup-opentofu@v1
+        with:
+          tofu_wrapper: false
+
+      - name: Export TF_VAR_* and SSH key
+        working-directory: .
+        env:
+          SECRETS: ${{ toJSON(secrets) }}
+          VARS: ${{ toJSON(vars) }}
+          SSH_PRIVATE_KEY: ${{ secrets.SSH_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          # GitHub upper-cases secret/variable names; tofu input vars are lower-case, so
+          # TF_VAR_GRAFANA_AUTH -> TF_VAR_grafana_auth. Heredoc form keeps multi-line values.
+          jq -rs 'add | to_entries[] | select(.key | startswith("TF_VAR_"))
+                  | "TF_VAR_\(.key[7:] | ascii_downcase)<<__TFVAR__\n\(.value)\n__TFVAR__"' \
+            <<<"$VARS $SECRETS" >> "$GITHUB_ENV"
+          # Git-ignored terraform.tfvars for a stack: whole file as secret TFVARS_<STACK>,
+          # e.g. terraform -> TFVARS_TERRAFORM, terraform/ups-monitoring -> TFVARS_TERRAFORM_UPS_MONITORING.
+          key="TFVARS_$(tr 'a-z/-' 'A-Z__' <<<"$STACK")"
+          jq -r --arg k "$key" '.[$k] // empty' <<<"$SECRETS" > "$STACK/ci.auto.tfvars"
+          [[ -s $STACK/ci.auto.tfvars ]] && echo "Using $key" || rm "$STACK/ci.auto.tfvars"
+          if [[ -n $SSH_PRIVATE_KEY ]]; then
+            install -d -m 700 ~/.ssh
+            printf '%s\n' "$SSH_PRIVATE_KEY" > ~/.ssh/id_ed25519 && chmod 600 ~/.ssh/id_ed25519
+          fi
+
+      - name: Init (R2 backend)
+        run: |
+          set -euo pipefail
+          # Same key rule as Makefile.tofu: a folder named `terraform` takes the repo name.
+          name=$(basename "$PWD"); [[ $name == terraform ]] && name=${{ github.event.repository.name }}
+          tofu init -input=false \
+            -backend-config="bucket=ai-platform-tfstate" \
+            -backend-config="key=$name/terraform.tfstate" \
+            -backend-config="region=auto" \
+            -backend-config="endpoints={s3=\"https://$R2_ACCOUNT_ID.r2.cloudflarestorage.com\"}" \
+            -backend-config="use_lockfile=true" \
+            -backend-config="skip_credentials_validation=true" \
+            -backend-config="skip_metadata_api_check=true" \
+            -backend-config="skip_region_validation=true" \
+            -backend-config="skip_requesting_account_id=true" \
+            -backend-config="skip_s3_checksum=true"
+
+      - name: Plan
+        id: plan
+        run: |
+          set -euo pipefail
+          tofu plan -input=false -no-color -lock-timeout=5m -out=tfplan | tee plan.log
+          {
+            echo "### tofu plan: \`$STACK\`"
+            grep -E '^(Plan:|No changes)' plan.log || true
+            echo '<details><summary>Full plan</summary>'; echo; echo '```'
+            tofu show -no-color tfplan | tail -c 60000
+            echo '```'; echo '</details>'
+          } > plan.md
+          cat plan.md >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Comment plan on PR
+        if: github.event_name == 'pull_request'
+        uses: marocchino/sticky-pull-request-comment@v2
+        with:
+          header: tofu-${{ matrix.stack }}
+          path: ${{ matrix.stack }}/plan.md
+
+      - name: Apply
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        run: tofu apply -input=false -lock-timeout=5m tfplan
