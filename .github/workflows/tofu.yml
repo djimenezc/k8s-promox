@@ -11,6 +11,7 @@ name: tofu
 #   secrets/variables named TF_VAR_*  -> exported as-is (tofu reads them as input vars)
 #   R2_ACCOUNT_ID, AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY  -> R2 state backend (required)
 #   SSH_PRIVATE_KEY                   -> ~/.ssh/id_ed25519 (stacks that local-exec over ssh)
+#   TFVARS_<STACK>                    -> <stack>/ci.auto.tfvars (a git-ignored terraform.tfvars)
 
 on:
   pull_request:
@@ -104,6 +105,11 @@ jobs:
           jq -rs 'add | to_entries[] | select(.key | startswith("TF_VAR_"))
                   | "TF_VAR_\(.key[7:] | ascii_downcase)<<__TFVAR__\n\(.value)\n__TFVAR__"' \
             <<<"$VARS $SECRETS" >> "$GITHUB_ENV"
+          # Git-ignored terraform.tfvars for a stack: whole file as secret TFVARS_<STACK>,
+          # e.g. terraform -> TFVARS_TERRAFORM, terraform/ups-monitoring -> TFVARS_TERRAFORM_UPS_MONITORING.
+          key="TFVARS_$(tr 'a-z/-' 'A-Z__' <<<"$STACK")"
+          jq -r --arg k "$key" '.[$k] // empty' <<<"$SECRETS" > "$STACK/ci.auto.tfvars"
+          [[ -s $STACK/ci.auto.tfvars ]] && echo "Using $key" || rm "$STACK/ci.auto.tfvars"
           if [[ -n $SSH_PRIVATE_KEY ]]; then
             install -d -m 700 ~/.ssh
             printf '%s\n' "$SSH_PRIVATE_KEY" > ~/.ssh/id_ed25519 && chmod 600 ~/.ssh/id_ed25519
