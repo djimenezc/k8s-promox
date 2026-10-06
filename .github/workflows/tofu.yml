@@ -78,7 +78,11 @@ jobs:
       run:
         working-directory: ${{ matrix.stack }}
     steps:
+      # Only this stack's folder: the meta-repo is ~250 MB (docs PDFs, graph) and a full
+      # checkout took >2 min over the home connection.
       - uses: actions/checkout@v4
+        with:
+          sparse-checkout: ${{ matrix.stack }}
 
       - name: Tools
         working-directory: .
