@@ -15,8 +15,10 @@ name: tofu
 
 on:
   pull_request:
+    paths-ignore: ['graphify-out/**']
   push:
     branches: [main]
+    paths-ignore: ['graphify-out/**']
 
 permissions:
   contents: read
