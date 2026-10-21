@@ -1,0 +1,28 @@
+name: Discord PR notify
+
+# Posts to the #pr-notifications Discord channel whenever a PR is opened.
+# Required repo secret: DISCORD_PR_NOTIFICATIONS_WEBHOOK_URL
+
+on:
+  pull_request:
+    types: [opened]
+
+permissions:
+  contents: read
+
+jobs:
+  notify:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Post to Discord
+        env:
+          WEBHOOK_URL: ${{ secrets.DISCORD_PR_NOTIFICATIONS_WEBHOOK_URL }}
+          TITLE: ${{ github.event.pull_request.title }}
+          URL: ${{ github.event.pull_request.html_url }}
+          REPO: ${{ github.repository }}
+          AUTHOR: ${{ github.event.pull_request.user.login }}
+        run: |
+          set -euo pipefail
+          content=$(jq -n --arg t "$TITLE" --arg u "$URL" --arg r "$REPO" --arg a "$AUTHOR" \
+            '{content: "📬 New PR in **\($r)** by \($a): [\($t)](\($u))"}')
+          curl -sf -H "Content-Type: application/json" -d "$content" "$WEBHOOK_URL"
