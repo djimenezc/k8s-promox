@@ -52,7 +52,7 @@ jobs:
             picked=$(while read -r f; do
               best=""
               for s in $stacks; do [[ $f == "$s"/* && ${#s} -gt ${#best} ]] && best=$s; done
-              [[ -n $best ]] && echo "$best"
+              [[ -z $best ]] || echo "$best"
             done <<<"$changed" | sort -u)
           fi
           echo "Stacks: ${picked:-none}"
