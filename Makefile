@@ -341,6 +341,17 @@ create-cloud-init-template-%: ## Create the Ubuntu 22.04 cloud-init template on 
 .PHONY: create-cloud-init-template
 create-cloud-init-template: create-cloud-init-template-$(PROXMOX_DEFAULT_NODE) ## Create the cloud-init template on the default node
 
+# k3s node IPs (see docs/TOPOLOGY.md) — image GC must run on the node itself,
+# so this is a plain IP list rather than the Proxmox host registry above.
+K3S_NODE_IPS ?= 192.168.50.10 192.168.50.11 192.168.50.12 192.168.50.212 192.168.50.213
+
+.PHONY: prune-images
+prune-images: ## Remove unused container images from every k3s node (frees node disk; old image versions pile up after bumps, e.g. hermes-agent)
+	@for ip in $(K3S_NODE_IPS); do \
+		printf "$(YELLOW)Pruning unused images on $$ip...$(NC)\n"; \
+		ssh $(VM_USER)@$$ip "sudo crictl rmi --prune" || true; \
+	done
+
 .PHONY: get-kubeconfig
 get-kubeconfig: ## Fetch kubeconfig from the control plane into the meta-repo root
 	@printf "$(YELLOW)Fetching kubeconfig from $(CONTROL_PLANE_IP)...$(NC)\n"
